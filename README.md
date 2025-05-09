@@ -32,7 +32,7 @@ Follow these steps to set up and run the YouTube Chapter Generator:
    pip install google-generativeai yt-dlp python-dotenv
    ```
 
-6. Create a `.env` file in the project directory with your Google API key:
+6. Create a `.env` file in the project directory with your [Google API](https://aistudio.google.com/app/apikey) key:
    ```
    GOOGLE_API_KEY=your_google_api_key_here
    ```
