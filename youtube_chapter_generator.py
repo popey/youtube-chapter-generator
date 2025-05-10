@@ -35,6 +35,10 @@ load_dotenv()
 DEFAULT_MODEL = "gemini-2.5-flash"
 
 # Models map for command line arguments
+# gemini-2.5-flash-preview-04-17 supports code execution,
+# function calling, search groubnding, structured outputs, and thinking
+# Input token limit: 1,048,576
+# Output token limit: 65,536
 MODELS = {
     "gemini-2.5-pro-exp": "models/gemini-2.5-pro-exp-03-25",
     "gemini-2.5-flash": "models/gemini-2.5-flash-preview-04-17"
