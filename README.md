@@ -40,7 +40,7 @@ Follow these steps to set up and run the YouTube Chapter Generator:
 ## Usage
 
 ```
-python youtube_chapter_generator.py <youtube_url> [--model MODEL]
+python youtube_chapter_generator.py <youtube_url> [--model MODEL] [--prompt PROMPTFILE]
 ```
 
 Options:
@@ -48,6 +48,7 @@ Options:
 - `--model`: Model to use for generation (optional)
   - `gemini-2.5-pro-exp`: Gemini 2.5 Pro Experimental
   - `gemini-2.5-flash`: Gemini 2.5 Flash Preview (default)
+- `--prompt`: Custom prompt to guide the chapter generation (optional)
 
 ## Examples
 
@@ -57,6 +58,9 @@ python youtube_chapter_generator.py https://www.youtube.com/watch?v=dQw4w9WgXcQ
 
 # Using a specific model
 python youtube_chapter_generator.py https://www.youtube.com/watch?v=dQw4w9WgXcQ --model gemini-2.5-pro-exp
+
+# Using a custom prompt
+python youtube_chapter_generator.py https://www.youtube.com/watch?v=dQw4w9WgXcQ --prompt sample_prompt.txt
 ```
 
 ## Output
