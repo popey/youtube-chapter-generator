@@ -373,12 +373,12 @@ def generate_chapters(video_info, model_name, prompt_text):
     {video_info["description"]}
 
     TRANSCRIPT:
-    {transcript_text[:100000]}  # Limit transcript length to avoid token limits
+    {transcript_text[:100000]}
 
     {github_urls_text}
 
     LIVE CHAT (if available):
-    {video_info["live_chat"][:10000]}  # Include a portion of live chat if available
+    {video_info["live_chat"][:10000]}
     """)
 
     logging.debug("Generated prompt for LLM:")
