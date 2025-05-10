@@ -1,0 +1,19 @@
+Your goal is to create a block of text in YouTube chapter format only.
+
+User provides:
+* Description from a youtube video
+* Live chat log from the video (if available)
+* Transcript from the video
+
+Please create a list of timestamps in youtube description format that I can paste directly in the youtube video description to generate the chapter markers. It should list the time we start talking about something and a concise but descriptive topic name.
+
+Follow these guidelines:
+* Format each line exactly as: `[timestamp] [chapter title]` (e.g., "0:00 Introduction")
+* Include 5-10 chapters depending on video length (more chapters for longer videos)
+* Focus on major topic changes, demos, segments, or guest introductions
+* Make chapter titles descriptive but concise (2-5 words is ideal)
+* Start with a chapter at 0:00 (required by YouTube)
+* Do not use backticks or other formatting in your response
+* Do not include any explanatory text before or after the chapter markers
+
+Suggest three hashtags for the end of the description, appropriate for the video content.

@@ -25,6 +25,8 @@ import urllib.parse
 import google.generativeai as genai
 from pathlib import Path
 from dotenv import load_dotenv
+import textwrap
+import logging
 
 # Load environment variables from .env file
 load_dotenv()
@@ -38,6 +40,13 @@ MODELS = {
     "gemini-2.5-flash": "models/gemini-2.5-flash-preview-04-17"
 }
 
+# Configure logging
+logging.basicConfig(
+    filename="youtube_chapter_generator.log",
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Generate chapter markers for YouTube videos")
@@ -45,6 +54,7 @@ def parse_arguments():
     parser.add_argument("--model", choices=list(MODELS.keys()), 
                         default=DEFAULT_MODEL, 
                         help="AI model to use for generation")
+    parser.add_argument("--prompt", help="Path to a text file containing the prompt")
     return parser.parse_args()
 
 def run_ytdlp_command(url, command_args):
@@ -141,6 +151,7 @@ def extract_github_urls_from_livechat(livechat_file):
 
 def get_video_info(url):
     """Get video title, description, subtitles, and live chat if available."""
+    logging.info("Retrieving video metadata...")
     print("Retrieving video metadata...")
     
     # Get video info (title, description, etc.)
@@ -148,6 +159,7 @@ def get_video_info(url):
     info_stdout, info_stderr = run_ytdlp_command(url, info_args)
     
     if not info_stdout:
+        logging.error("Failed to retrieve video information.")
         print("Failed to retrieve video information.")
         sys.exit(1)
     
@@ -156,16 +168,22 @@ def get_video_info(url):
     title = video_info.get('title', 'Unknown Title')
     description = video_info.get('description', '')
     
+    logging.debug(f"Video title: {title}")
+    logging.debug(f"Video ID: {video_id}")
+    logging.debug(f"Description: {description}")
+    
     print(f"Video title: {title}")
     print(f"Video ID: {video_id}")
     
     # Get English subtitles
     subtitle_args = ["--write-sub", "--write-auto-sub", "--sub-lang", "en", "--convert-subs", "srt"]
+    logging.info("Downloading English subtitles...")
     print("Downloading English subtitles...")
     sub_stdout, sub_stderr = run_ytdlp_command(url, subtitle_args)
     
     # Try to get live chat if available
     livechat_args = ["--write-sub", "--sub-lang", "live_chat"]
+    logging.info("Attempting to download live chat (if available)...")
     print("Attempting to download live chat (if available)...")
     chat_stdout, chat_stderr = run_ytdlp_command(url, livechat_args)
     
@@ -174,8 +192,10 @@ def get_video_info(url):
     livechat_file = None
     
     # List all files in current directory for debugging
+    logging.info("Looking for subtitle and live chat files...")
     print("Looking for subtitle and live chat files...")
     all_files = list(Path('.').glob('*'))
+    logging.debug(f"Found {len(all_files)} files in directory")
     print(f"Found {len(all_files)} files in directory")
     
     # Store already processed files to avoid duplicates
@@ -206,6 +226,7 @@ def get_video_info(url):
                 continue
                 
             processed_files.add(str(file))
+            logging.debug(f"Found potential subtitle file: {file}")
             print(f"Found potential subtitle file: {file}")
             
             if "live_chat" in file.name.lower():
@@ -218,15 +239,18 @@ def get_video_info(url):
     # Read subtitle content
     subtitle_content = ""
     if subtitle_file:
+        logging.info(f"Using subtitle file: {subtitle_file}")
         print(f"Using subtitle file: {subtitle_file}")
         subtitle_content = subtitle_file.read_text(encoding='utf-8', errors='replace')
     else:
+        logging.warning("No subtitle file found.")
         print("No subtitle file found.")
     
     # Read live chat content
     livechat_content = ""
     github_urls = []
     if livechat_file:
+        logging.info(f"Using live chat file: {livechat_file}")
         print(f"Using live chat file: {livechat_file}")
         
         # Check if it's a JSON file for processing GitHub URLs
@@ -239,10 +263,12 @@ def get_video_info(url):
         else:
             livechat_content = livechat_file.read_text(encoding='utf-8', errors='replace')
     else:
+        logging.warning("No live chat file found.")
         print("No live chat file found.")
     
     # Check if we have either subtitles or live chat
     if not subtitle_content and not livechat_content:
+        logging.error("Neither subtitles nor live chat could be retrieved.")
         print("Error: Neither subtitles nor live chat could be retrieved.")
         print("At least one of these is required to generate chapter markers.")
         sys.exit(1)
@@ -282,75 +308,94 @@ def parse_srt_to_text(srt_content):
     
     return " ".join(cleaned_lines)
 
-def generate_chapters(video_info, model_name):
+default_prompt = textwrap.dedent("""
+Your goal is to create a block of text in YouTube chapter format only.
+
+User provides:
+* Description from a youtube video
+* Live chat log from the video (if available)
+* Transcript from the video
+
+Please create a list of timestamps in youtube description format that I can paste directly in the youtube video description to generate the chapter markers. It should list the time we start talking about something and a concise but descriptive topic name.
+
+Follow these guidelines:
+* Format each line exactly as: `[timestamp] [chapter title]` (e.g., "0:00 Introduction")
+* Include 5-10 chapters depending on video length (more chapters for longer videos)
+* Focus on major topic changes, demos, segments, or guest introductions
+* Make chapter titles descriptive but concise (2-5 words is ideal)
+* Start with a chapter at 0:00 (required by YouTube)
+* Do not use backticks or other formatting in your response
+* Do not include any explanatory text before or after the chapter markers
+
+Suggest three hashtags for the end of the description, appropriate for the video content.
+""")
+
+def parse_prompt_file(prompt_file):
+    """Read the prompt from a file."""
+    try:
+        with open(prompt_file, 'r', encoding='utf-8') as f:
+            return f.read()
+    except Exception as e:
+        print(f"Error reading prompt file {prompt_file}: {e}")
+        sys.exit(1)
+
+def generate_chapters(video_info, model_name, prompt_text):
     """Generate chapter markers using Google's Generative AI."""
     api_key = os.getenv("GOOGLE_API_KEY")
-    
+
     if not api_key:
+        logging.error("GOOGLE_API_KEY environment variable not set.")
         print("Error: GOOGLE_API_KEY environment variable not set.")
         print("Please set this variable in a .env file or export it in your shell.")
         sys.exit(1)
-    
+
     # Configure the Google Generative AI API
     genai.configure(api_key=api_key)
-    
+
     # Select the model
     model = genai.GenerativeModel(model_name)
-    
+
     # Prepare transcript text
     transcript_text = parse_srt_to_text(video_info["subtitles"])
-    
+
     # Format the GitHub URLs for inclusion in the prompt
     github_urls_text = ""
     if video_info["github_urls"]:
         github_urls_text = "\n\nGitHub URLs from live chat (with timestamps):\n"
         for item in video_info["github_urls"]:
             github_urls_text += f"{item['timestamp']} - {item['url']}\n"
-    
+
     # Create the prompt
-    prompt = f"""
-Your goal is to create a block of text in YouTube chapter format only.
+    prompt = textwrap.dedent(f"""
+    {prompt_text}
 
-User provides:
+    VIDEO DESCRIPTION:
+    {video_info["description"]}
 
-* Description from a youtube video
-* Live chat log from the video (if available)
-* Transcript from the video
-* GitHub URLs from live chat with timestamps (if available)
+    TRANSCRIPT:
+    {transcript_text[:100000]}  # Limit transcript length to avoid token limits
 
-Please create a list of timestamps in youtube description format that I can paste in the youtube video description to generate the chapter markers. It should list the time we start talking about something and the topic. Only give timestamps for significant topics of conversation. If an issue or pull request is mentioned, include the GitHub URL with the timestamp.
-The format should be:
-00:00 - Topic 1
-00:30 - Topic 2
-00:45 - Topic 3
+    {github_urls_text}
 
-If GitHub URLs are provided with timestamps, consider those as key topics being discussed at those timestamps.
+    LIVE CHAT (if available):
+    {video_info["live_chat"][:10000]}  # Include a portion of live chat if available
+    """)
 
-Do not expand further with more detail. I only need you to make the chapter block.
-
-Suggest three hashtags for the end of the description, appropriate for the video.
-
-VIDEO DESCRIPTION:
-{video_info["description"]}
-
-TRANSCRIPT:
-{transcript_text[:30000]}  # Limit transcript length to avoid token limits
-
-{github_urls_text}
-
-LIVE CHAT (if available):
-{video_info["live_chat"][:5000]}  # Include a portion of live chat if available
-"""
+    logging.debug("Generated prompt for LLM:")
+    logging.debug(prompt)
 
     print("\nGenerating chapter markers...")
     print(f"Using model: {model_name}")
-    
+
     # Generate content with error handling
     try:
         response = model.generate_content(prompt)
+        logging.debug("Response from LLM:")
+        logging.debug(response.text)
         return response.text
     except Exception as e:
-        print(f"\nError: Google Gemini API call failed:")
+        logging.error("Google Gemini API call failed:", exc_info=True)
+        print("\nError: Google Gemini API call failed:")
         print(f"{str(e)}")
         print("\nPossible causes:")
         print("- Invalid API key")
@@ -379,8 +424,14 @@ def main():
                 f.write(f"{item['timestamp']} - {item['url']}\n")
         print(f"\nExtracted GitHub URLs saved to {github_urls_file}")
     
+    # Parse the prompt
+    if args.prompt:
+        prompt_text = parse_prompt_file(args.prompt)
+    else:
+        prompt_text = default_prompt
+    
     # Generate chapter markers
-    chapters = generate_chapters(video_info, model_name)
+    chapters = generate_chapters(video_info, model_name, prompt_text)
     
     # Save the generated chapters to a file
     output_file = f"{video_info['video_id']}_chapters.txt"
